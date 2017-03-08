@@ -1,6 +1,6 @@
 using JSON
 using Requests
-import Requests: URI, post
+import Requests: URI, get
 
 using DandelionWebSockets
 # Explicitly import the callback functions that we're going to add more methods for.
@@ -18,29 +18,29 @@ type BitcoinBlockchainHandler <: WebSocketHandler
 
 end
 
-function getResult(handler, url, data = Dict())
-  headers = Dict("Content-Type" => "application/json")
+function getResult(handler, url)
   attempt = 1
-  resp = post(url; headers = headers, data = JSON.json(data))
+  resp = get(url)
+
   # Retry if service temporarily not available
   while resp.status == 503 && attempt < handler.max_attempts
     sleep(attempt) #increase wait time by one second for each failed attempt
     attempt += 1
-    resp = post(url; headers = headers, data = JSON.json(data))
+    resp = get(url)
   end
   if resp.status == 503
-    error("Aborting request with url: $url, data: $data after $(handler.max_attempts) attempts")
+    error("Aborting request with url: $url after $(handler.max_attempts) attempts")
   elseif resp.status != 200
-    error("$(resp.status): Error executing the request with url: $url, data: $data - $resp")
+    error("$(resp.status): Error executing the request with url: $url, resp: $resp")
   else
     try
       parsedresp = Requests.json(resp)
       if "error" in keys(parsedresp)
-        error("Error parsing response to request with url: $url, data: $dat - $(parsedresp["error"])")
+        error("Error parsing response to request with url: $url, resp: $(parsedresp["error"])")
       end
       parsedresp
     catch e
-      error("Error parsing response to request with url: $url, data: $data - $resp")
+      error("Error parsing response to request with url: $url, resp: $resp")
     end
   end
 end
@@ -130,3 +130,6 @@ end
 
 subscribe_unconfirmed_transcations(handler, publish_callback = subscribe) = subscribe(handler, "unconfirmed_sub", "utx", publish_callback)
 subscribe_new_blocks(handler, publish_callback = subscribe) = subscribe(handler, "blocks_sub", "block", publish_callback)
+get_block(handler, block) = getResult(handler, "https://blockchain.info/rawblock/$block")
+get_transaction(handler, tx) = getResult(handler, "https://blockchain.info/rawtx/$tx")
+get_address(handler, address) = getResult(handler, "https://blockchain.info/rawaddr/$address")
